@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IoT Chili Garden - Dashboard</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🌶️ IoT Chili Garden Dashboard</h1>
+    
+    <section class="section">
+      <h2>📊 Sensor Data</h2>
+      <div id="sensor-container" class="sensor-grid">
+        <p class="loading">Loading sensor data...</p>
+      </div>
+      <button id="refresh-btn" class="btn btn-primary">🔄 Refresh Data</button>
+    </section>
+
+    <section class="section">
+      <h2>⚙️ Kontrol Device</h2>
+      
+      <div class="control-panel">
+        <div class="control-group">
+          <h3>💧 Pompa Air</h3>
+          <div class="button-group">
+            <button id="pump-on-btn" class="btn btn-success" onclick="controlPump('on')">Pompa ON</button>
+            <button id="pump-off-btn" class="btn btn-danger" onclick="controlPump('off')">Pompa OFF</button>
+            <button id="pump-auto-btn" class="btn btn-info" onclick="controlPump('auto')">Mode AUTO</button>
+          </div>
+          <p id="pump-status" class="status-text">Status: -</p>
+        </div>
+
+        <div class="control-group">
+          <h3>🔄 Servo (Katup)</h3>
+          <div class="slider-container">
+            <input type="range" id="servo-slider" min="0" max="180" value="90" 
+                   oninput="updateServoDisplay(this.value)">
+            <span id="servo-display">90°</span>
+          </div>
+          <button class="btn btn-primary" onclick="controlServo()">Set Servo</button>
+          <p id="servo-status" class="status-text">Status: -</p>
+        </div>
+
+        <div class="control-group">
+          <h3>🤖 Mode Otomatis</h3>
+          <div class="toggle-switch">
+            <input type="checkbox" id="auto-mode-toggle" onchange="toggleAutoMode()">
+            <label for="auto-mode-toggle">Enable Auto Mode</label>
+          </div>
+          <p id="auto-status" class="status-text">Auto Mode: OFF</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>📈 Log Perintah</h2>
+      <div id="log-container" class="log-box">
+        <p class="log-entry">[Siap] Sistem IoT terhubung</p>
+      </div>
+      <button id="clear-log-btn" class="btn btn-secondary">Clear Log</button>
+    </section>
+  </div>
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>
