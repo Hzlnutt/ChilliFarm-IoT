@@ -3,8 +3,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css'; 
 
-const FLASK_IP = "192.168.0.186"; 
-const API_URL = `http://${FLASK_IP}:5000/api`;
+const FLASK_IP = "http://192.168.137.1:5000"; 
+const API_URL = "http://192.168.137.1:5000/api/data/latest";
 const REFRESH_INTERVAL = 5000; // 5 detik
 
 // --- Komponen Kartu Sensor ---
