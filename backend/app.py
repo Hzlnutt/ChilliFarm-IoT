@@ -25,19 +25,19 @@ def on_mqtt_message(topic, data):
     try:
         if isinstance(data, dict):
             # Temperature
-            if 'temperature_c' in data:
+            if 'temperature_c' in data and data['temperature_c'] is not None:
                 sensor = get_or_create_sensor(session, 'DHT22_TEMP', 'Chili Plant')
                 m = Measurement(sensor_id=sensor.id, value=data['temperature_c'], unit='C')
                 session.add(m)
             
             # Humidity
-            if 'humidity_pct' in data:
+            if 'humidity_pct' in data and data['humidity_pct'] is not None:
                 sensor = get_or_create_sensor(session, 'DHT22_HUMIDITY', 'Chili Plant')
                 m = Measurement(sensor_id=sensor.id, value=data['humidity_pct'], unit='%')
                 session.add(m)
             
             # Soil moisture
-            if 'soil_moisture' in data:
+            if 'soil_moisture' in data and data['soil_moisture'] is not None:
                 sensor = get_or_create_sensor(session, 'SOIL_MOISTURE', 'Chili Plant')
                 m = Measurement(sensor_id=sensor.id, value=data['soil_moisture'], unit='%')
                 session.add(m)
@@ -48,10 +48,11 @@ def on_mqtt_message(topic, data):
                 m = Measurement(sensor_id=sensor.id, value=data['ph'], unit='pH')
                 session.add(m)
             
-            # Light
-            if 'light_lux' in data:
+            # Light (check both light_lux and lux for compatibility)
+            light_value = data.get('light_lux') or data.get('lux')
+            if light_value is not None:
                 sensor = get_or_create_sensor(session, 'BH1750', 'Chili Plant')
-                m = Measurement(sensor_id=sensor.id, value=data['light_lux'], unit='lux')
+                m = Measurement(sensor_id=sensor.id, value=light_value, unit='lux')
                 session.add(m)
             
             session.commit()
@@ -95,4 +96,5 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # Run on hotspot IP for cross-device access (192.168.137.1)
+    app.run(host='192.168.137.1', port=5000, debug=False)

@@ -32,7 +32,7 @@ WIFI_SSID = "hotspotkeren"
 WIFI_PASS = "87654321"
 
 # MQTT
-MQTT_BROKER = "192.168.0.186"   # local laptop hotspot IP (ganti ke IP Anda)
+MQTT_BROKER = "192.168.137.1"   # hotspot IP (accessible from other devices on same hotspot)
 MQTT_PORT = 1883
 MQTT_USER = None
 MQTT_PASS = None

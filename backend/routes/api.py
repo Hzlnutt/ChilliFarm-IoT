@@ -240,24 +240,16 @@ def get_sensor_measurements(sensor_id):
 
 @api_bp.route('/data/latest', methods=['GET'])
 def get_latest_data():
-    """Get latest reading from all sensors
+    """Get latest reading from all sensors in flat format for frontend
     
     Returns:
         {
-            "timestamp": "2025-11-18T10:30:45",
-            "sensors": {
-                "DHT22_TEMP": {
-                    "sensor_id": 1,
-                    "value": 28.5,
-                    "unit": "C"
-                },
-                "DHT22_HUMIDITY": {
-                    "sensor_id": 2,
-                    "value": 65.0,
-                    "unit": "%"
-                },
-                ...
-            }
+            "temperature_c": 28.5,
+            "humidity_pct": 65.0,
+            "soil_moisture": 55,
+            "ph": 6.8,
+            "light_lux": 1250.0,
+            "timestamp": "2025-11-18T10:30:45"
         }
     """
     session = get_session()
@@ -265,8 +257,16 @@ def get_latest_data():
         sensors = session.query(Sensor).all()
         
         result = {
-            'timestamp': datetime.utcnow().isoformat(),
-            'sensors': {}
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        # Mapping nama sensor ke field name untuk frontend
+        sensor_field_map = {
+            'DHT22_TEMP': 'temperature_c',
+            'DHT22_HUMIDITY': 'humidity_pct',
+            'SOIL_MOISTURE': 'soil_moisture',
+            'PH_SENSOR': 'ph',
+            'BH1750': 'light_lux'
         }
         
         for sensor in sensors:
@@ -276,13 +276,11 @@ def get_latest_data():
                 .first()
             
             if latest:
-                result['sensors'][sensor.name] = {
-                    'sensor_id': sensor.id,
-                    'location': sensor.location,
-                    'value': latest.value,
-                    'unit': latest.unit,
-                    'timestamp': latest.timestamp.isoformat()
-                }
+                field_name = sensor_field_map.get(sensor.name, sensor.name.lower())
+                result[field_name] = latest.value
+                # Also store timestamp from latest measurement
+                if 'timestamp' not in result or latest.timestamp.isoformat() > result.get('timestamp', ''):
+                    result['timestamp'] = latest.timestamp.isoformat()
         
         return jsonify(result), 200
     except Exception as e:

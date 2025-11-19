@@ -16,7 +16,7 @@ Sebelum memulai, pastikan Anda memiliki:
 
 ---
 
-## 🔧 Langkah 1: Verifikasi IP Address (30 detik)
+## 🔧 Langkah 1: Verifikasi IP Hotspot (30 detik)
 
 Buka PowerShell/Command Prompt dan jalankan:
 
@@ -24,7 +24,7 @@ Buka PowerShell/Command Prompt dan jalankan:
 ipconfig
 ```
 
-Cari **IPv4 Address** - contohnya `192.168.0.186`. **Catat IP ini**, karena Anda akan membutuhkannya di langkah berikutnya.
+Cari **IPv4 Address dari adapter WiFi hotspot Anda** - contohnya `192.168.137.1`. **Catat IP ini**, karena ini adalah IP hotspot untuk akses cross-device.
 
 ---
 
@@ -35,13 +35,13 @@ Cari **IPv4 Address** - contohnya `192.168.0.186`. **Catat IP ini**, karena Anda
 Buka file `esp32_garden_mqtt.py` dan cari baris:
 
 ```python
-MQTT_BROKER = "192.168.0.186"
+MQTT_BROKER = "192.168.137.1"
 ```
 
-**Ubah ke IP Address Anda** jika berbeda:
+**Jika IP hotspot Anda berbeda**, ubah ke IP Address Anda:
 
 ```python
-MQTT_BROKER = "YOUR_IP_ADDRESS"  # Ganti dengan IP Anda dari ipconfig
+MQTT_BROKER = "YOUR_HOTSPOT_IP"  # Ganti dengan IP hotspot Anda dari ipconfig
 ```
 
 ### Edit File: `backend/config.py`
@@ -49,13 +49,13 @@ MQTT_BROKER = "YOUR_IP_ADDRESS"  # Ganti dengan IP Anda dari ipconfig
 Buka file `backend/config.py` dan pastikan:
 
 ```python
-MQTT_BROKER = os.environ.get('MQTT_BROKER', '192.168.0.186')
+MQTT_BROKER = os.environ.get('MQTT_BROKER', '192.168.137.1')
 ```
 
-Jika IP Anda berbeda, ubah default value:
+Jika IP hotspot Anda berbeda, ubah default value:
 
 ```python
-MQTT_BROKER = os.environ.get('MQTT_BROKER', 'YOUR_IP_ADDRESS')
+MQTT_BROKER = os.environ.get('MQTT_BROKER', 'YOUR_HOTSPOT_IP')
 ```
 
 ### Verifikasi WiFi Credentials
@@ -98,9 +98,9 @@ python app.py
 
 **Output yang diharapkan:**
 ```
-[OK] MQTT connected to 192.168.0.186:1883
+[OK] MQTT connected to 192.168.137.1:1883
  * Running on http://127.0.0.1:5000
- * Running on http://192.168.0.186:5000
+ * Running on http://192.168.137.1:5000
 ```
 
 ✅ **Backend sudah berjalan! Jangan tutup terminal ini.**
@@ -112,7 +112,7 @@ python app.py
 Buka **Terminal/PowerShell Baru** ketiga dan jalankan:
 
 ```bash
-curl http://192.168.0.186:5000/api/health
+curl http://192.168.137.1:5000/api/health
 ```
 
 **Output yang diharapkan:**
@@ -120,7 +120,7 @@ curl http://192.168.0.186:5000/api/health
 {
   "status": "ok",
   "mqtt": "connected",
-  "broker": "192.168.0.186",
+  "broker": "192.168.137.1",
   "port": 1883,
   "timestamp": "2025-11-18T10:30:45"
 }
@@ -177,7 +177,7 @@ curl http://192.168.0.186:5000/api/health
 Kembali ke **Terminal/PowerShell ketiga** dan jalankan:
 
 ```bash
-curl http://192.168.0.186:5000/api/data/latest
+curl http://192.168.137.1:5000/api/data/latest
 ```
 
 **Output yang diharapkan:**
@@ -201,7 +201,7 @@ curl http://192.168.0.186:5000/api/data/latest
 ### Test Pompa
 
 ```bash
-curl -X POST http://192.168.0.186:5000/api/control \
+curl -X POST http://192.168.137.1:5000/api/control \
   -H "Content-Type: application/json" \
   -d '{"pump": "on"}'
 ```
@@ -211,7 +211,7 @@ curl -X POST http://192.168.0.186:5000/api/control \
 ### Matikan Pompa
 
 ```bash
-curl -X POST http://192.168.0.186:5000/api/control \
+curl -X POST http://192.168.137.1:5000/api/control \
   -H "Content-Type: application/json" \
   -d '{"pump": "off"}'
 ```
@@ -223,7 +223,7 @@ curl -X POST http://192.168.0.186:5000/api/control \
 ## 📊 Langkah 9: Cek Semua Sensor (1 menit)
 
 ```bash
-curl http://192.168.0.186:5000/api/sensors
+curl http://192.168.137.1:5000/api/sensors
 ```
 
 **Output yang diharapkan:**
@@ -244,7 +244,7 @@ curl http://192.168.0.186:5000/api/sensors
 ## 📈 Langkah 10: Cek Data Historis (1 menit)
 
 ```bash
-curl http://192.168.0.186:5000/api/measurements?limit=10
+curl http://192.168.137.1:5000/api/measurements?limit=10
 ```
 
 **Output:**
@@ -323,7 +323,7 @@ Jika semua yang berikut terpenuhi, system sudah berjalan dengan sempurna:
 3. Cek IP address di semua file
 4. Test dengan data mock:
    ```bash
-   mosquitto_pub -h 192.168.0.186 -p 1883 \
+   mosquitto_pub -h 192.168.137.1 -p 1883 \
      -t "esp32/chili/data" \
      -m '{"temperature_c": 28.5, "humidity_pct": 65.0, "soil_moisture": 55, "ph": 6.8, "light_lux": 1250.0}'
    ```

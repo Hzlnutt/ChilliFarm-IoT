@@ -3,18 +3,21 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css'; 
 
-const FLASK_IP = "192.168.0.186"; 
-const API_URL = `http://${FLASK_IP}:5000/api`;
+const FLASK_IP = "192.168.137.1"; 
+const API_URL = `http://192.168.137.1:5000/api/data/latest`;
 const REFRESH_INTERVAL = 5000; // 5 detik
 
 // --- Komponen Kartu Sensor ---
-const SensorCard = ({ title, value, unit, status = null }) => (
-    <div className="sensor-card">
-        <h3>{title}</h3>
-        <p className="value">{value} {unit}</p>
-        {status && <p className={`status ${status.toLowerCase().replace(' ', '-')}`}>{status}</p>}
-    </div>
-);
+const SensorCard = ({ title, value, unit, status = null }) => {
+    const displayValue = value !== undefined && value !== null ? value.toFixed(2) : '--';
+    return (
+        <div className="sensor-card">
+            <h3>{title}</h3>
+            <p className="value">{displayValue} {unit}</p>
+            {status && <p className={`status ${status.toLowerCase().replace(' ', '-')}`}>{status}</p>}
+        </div>
+    );
+};
 
 // --- Komponen Utama Dashboard ---
 function Dashboard() {
@@ -26,18 +29,23 @@ function Dashboard() {
     // Fungsi untuk mengambil data sensor terbaru
     const fetchSensorData = async () => {
         try {
-            const response = await axios.get(`${API_URL}/data/latest`);
+            console.log("Fetching from:", API_URL);
+            const response = await axios.get(API_URL);
+            console.log("Response data:", response.data);
             const data = response.data;
             setSensorData(data);
             
             // Logika sederhana untuk status pompa dari Soil Moisture (simulasi)
-            const isDry = data.soil_moisture < 40;
-            setPumpStatus(isDry ? 'OFF' : 'ON'); // Asumsi pompa otomatis aktif jika kering, tapi kita akan ubah statusnya di control manual
+            const soilMoisture = data.soil_moisture || 0;
+            const isDry = soilMoisture < 40;
+            setPumpStatus(isDry ? 'OFF' : 'ON');
             
             setLoading(false);
+            setError(null);
         } catch (err) {
             console.error("Gagal mengambil data dari Flask:", err);
-            setError("Gagal terhubung ke API Flask. Pastikan backend berjalan di IP: " + FLASK_IP);
+            console.error("Error details:", err.response?.status, err.response?.data);
+            setError(`Gagal terhubung ke API Flask.\nIP: ${FLASK_IP}\nError: ${err.message}`);
             setLoading(false);
         }
     };
@@ -47,7 +55,7 @@ function Dashboard() {
         try {
             setPumpStatus(command === 'on' ? 'WAITING...' : 'WAITING...');
             
-            const response = await axios.post(`${API_URL}/control`, {
+            const response = await axios.post(`http://192.168.137.1:5000/api/control`, {
                 pump: command
             });
 
@@ -81,7 +89,7 @@ function Dashboard() {
     if (!sensorData) return <div className="loading">Tidak ada data sensor yang diterima.</div>;
     
     // Logika Status Tanah
-    const soilMoistureValue = sensorData.soil_moisture;
+    const soilMoistureValue = sensorData.soil_moisture || 0;
     const soilStatus = soilMoistureValue < 40 ? 'Kering' : 'Lembab';
 
     return (
