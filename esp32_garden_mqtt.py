@@ -8,8 +8,11 @@
 # BH1750 -> SDA=21, SCL=22 (3.3V I2C)
 # pH Sensor -> Po -> GPIO 35 (analog input), V+ -> 5V, G -> GND
 # Soil Moisture -> GPIO 34 (3.3V analog input)
-# Pompa (relay) -> GPIO 26 (digital output, aktif HIGH)
-# Servo -> GPIO 27 (PWM output, 50Hz)
+# Lift Kiri (relay) -> GPIO 26 (digital output, aktif HIGH)
+# Lift Kanan (relay) -> GPIO 25 (digital output, aktif HIGH)
+# Water Pump (relay) -> GPIO 13 (digital output, aktif HIGH)
+# Servo Kiri (lid) -> GPIO 27 (PWM output, 50Hz)
+# Servo Kanan (lid) -> GPIO 14 (PWM output, 50Hz)
 # Semua GND harus dihubungkan bersama (ESP32, sensor, modul, relay, dll)
 
 # DAYA:
@@ -23,6 +26,7 @@
 import network, time, machine, ubinascii, json, dht, utime
 from umqtt.simple import MQTTClient
 from machine import Pin, ADC, I2C, PWM
+# urequests for backend sync (optional for later)
 
 ### ========== CONFIG ========== ###
 DEVICE_ID = "esp32_chili_01"
@@ -44,20 +48,31 @@ TOPIC_COMMANDS = b"esp32/chili/cmd"        # Must match backend config!
 # Pins (sesuaikan)
 PIN_DHT = 15
 PIN_PH_ADC = 35        # pH sensor
-PIN_SOIL_ADC = 34      # Soil moisture sensor (update dari GPIO 32)
-PIN_PUMP = 26
-PIN_SERVO = 27
+PIN_SOIL_ADC = 34      # Soil moisture sensor
+PIN_LIFT_LEFT = 26     # Relay lift kiri
+PIN_LIFT_RIGHT = 25    # Relay lift kanan
+PIN_SERVO_LEFT = 27    # Servo lid kiri (PWM)
+PIN_SERVO_RIGHT = 14   # Servo lid kanan (PWM)
+PIN_WATER_PUMP = 13    # Relay water pump
 
 # BH1750 usage toggle
 USE_BH1750 = True
 
-# Soil thresholds (percentage) — adjusted for 0-100% range
+# Soil thresholds (percentage)
 SOIL_DRY_THRESHOLD = 40      # if soil_moisture < 40% => dry, need watering
 SOIL_WET_THRESHOLD = 70      # if soil_moisture > 70% => wet, stop watering
 
-# Pump safety
+# Lift safety (untuk lifting mechanism)
+LIFT_MAX_RUNTIME_SEC = 30  # max seconds lift can run continuously
+LIFT_MIN_OFF_SEC = 5       # minimum off time between runs
+
+# Pump safety (untuk water pump)
 PUMP_MAX_RUNTIME_SEC = 60  # max seconds pump can run continuously
-PUMP_MIN_OFF_SEC = 30      # minimum off time between runs
+PUMP_MIN_OFF_SEC = 10      # minimum off time between pump runs
+
+# Servo positions untuk lid control
+SERVO_LID_OPEN = 90    # Servo angle untuk buka lid (tarik tali)
+SERVO_LID_CLOSE = 0    # Servo angle untuk tutup lid (longgarkan tali)
 
 # Sensor read/publish intervals
 READ_INTERVAL = 20  # seconds
@@ -122,20 +137,38 @@ dht_sensor = dht.DHT22(Pin(PIN_DHT))
 soil_adc = ADC(Pin(PIN_SOIL_ADC)); soil_adc.atten(ADC.ATTN_11DB); soil_adc.width(ADC.WIDTH_12BIT)
 ph_adc = ADC(Pin(PIN_PH_ADC)); ph_adc.atten(ADC.ATTN_11DB); ph_adc.width(ADC.WIDTH_12BIT)
 
-pump = Pin(PIN_PUMP, Pin.OUT)
-pump.value(0)
+# Lift relays (both normally OFF)
+lift_left = Pin(PIN_LIFT_LEFT, Pin.OUT)
+lift_right = Pin(PIN_LIFT_RIGHT, Pin.OUT)
+lift_left.value(0)
+lift_right.value(0)
 
-# Servo setup using PWM (50Hz)
-servo = PWM(Pin(PIN_SERVO), freq=50)
+# Water pump relay (normally OFF)
+water_pump = Pin(PIN_WATER_PUMP, Pin.OUT)
+water_pump.value(0)
+
+# Two servos for lid control (left & right) using PWM (50Hz)
+servo_left = PWM(Pin(PIN_SERVO_LEFT), freq=50)
+servo_right = PWM(Pin(PIN_SERVO_RIGHT), freq=50)
+
 def servo_angle_to_duty(angle):
     if angle < 0: angle = 0
     if angle > 180: angle = 180
     duty = int(25 + (angle / 180.0) * (128 - 25))
     return duty
 
-def set_servo(angle):
+def set_servo_left(angle):
     duty = servo_angle_to_duty(angle)
-    servo.duty(duty)
+    servo_left.duty(duty)
+
+def set_servo_right(angle):
+    duty = servo_angle_to_duty(angle)
+    servo_right.duty(duty)
+
+def set_both_servos(angle):
+    """Set both left and right servos to same angle"""
+    set_servo_left(angle)
+    set_servo_right(angle)
 
 # I2C dan BH1750 (pin SDA=21, SCL=22)
 i2c = None
@@ -166,22 +199,63 @@ def mqtt_connect():
         return False
 
 AUTO_MODE = True
-last_pump_time = 0
+lift_running_since = 0
+last_lift_stop = 0
 pump_running_since = 0
 last_pump_stop = 0
+lid_state = "CLOSED"  # OPEN or CLOSED
+
+def lift_up():
+    """Raise both lift relays"""
+    global lift_running_since
+    lift_left.value(1)
+    lift_right.value(1)
+    lift_running_since = time.time()
+    print("[LIFT] Both relays UP")
+    publish_actuator({"lift": "UP", "relay_left": PIN_LIFT_LEFT, "relay_right": PIN_LIFT_RIGHT, "ts": ts_now_str()})
+
+def lift_down():
+    """Lower both lift relays"""
+    global lift_running_since, last_lift_stop
+    lift_left.value(0)
+    lift_right.value(0)
+    lift_running_since = 0
+    last_lift_stop = time.time()
+    print("[LIFT] Both relays DOWN")
+    publish_actuator({"lift": "DOWN", "relay_left": PIN_LIFT_LEFT, "relay_right": PIN_LIFT_RIGHT, "ts": ts_now_str()})
 
 def pump_on():
+    """Turn on water pump"""
     global pump_running_since
-    pump.value(1)
+    water_pump.value(1)
     pump_running_since = time.time()
-    publish_actuator({"pump": "ON", "ts": ts_now_str()})
+    print("[PUMP] Water pump ON")
+    publish_actuator({"pump": "ON", "relay_pin": PIN_WATER_PUMP, "ts": ts_now_str()})
 
 def pump_off():
+    """Turn off water pump"""
     global pump_running_since, last_pump_stop
-    pump.value(0)
+    water_pump.value(0)
     pump_running_since = 0
     last_pump_stop = time.time()
-    publish_actuator({"pump": "OFF", "ts": ts_now_str()})
+    print("[PUMP] Water pump OFF")
+    publish_actuator({"pump": "OFF", "relay_pin": PIN_WATER_PUMP, "ts": ts_now_str()})
+
+def open_lid():
+    """Open box lid (both servos pull rope)"""
+    global lid_state
+    set_both_servos(SERVO_LID_OPEN)
+    lid_state = "OPEN"
+    print("[LID] Opening... servo angle =", SERVO_LID_OPEN)
+    publish_actuator({"lid": "OPEN", "servo_left": SERVO_LID_OPEN, "servo_right": SERVO_LID_OPEN, "ts": ts_now_str()})
+
+def close_lid():
+    """Close box lid (both servos release rope)"""
+    global lid_state
+    set_both_servos(SERVO_LID_CLOSE)
+    lid_state = "CLOSED"
+    print("[LID] Closing... servo angle =", SERVO_LID_CLOSE)
+    publish_actuator({"lid": "CLOSED", "servo_left": SERVO_LID_CLOSE, "servo_right": SERVO_LID_CLOSE, "ts": ts_now_str()})
 
 def on_mqtt_message(topic, msg):
     global AUTO_MODE
@@ -190,23 +264,44 @@ def on_mqtt_message(topic, msg):
     except:
         print("Invalid MQTT payload:", msg)
         return
-    print("MQTT cmd:", payload)
+    print("[MQTT-CMD]", payload)
+    
+    # Lift control (both relays)
+    if "lift" in payload:
+        cmd = payload["lift"].lower()
+        if cmd == "up":
+            AUTO_MODE = False
+            lift_up()
+        elif cmd == "down":
+            AUTO_MODE = False
+            lift_down()
+    
+    # Lid control (servo-based)
+    if "lid" in payload:
+        cmd = payload["lid"].lower()
+        if cmd == "open":
+            open_lid()
+        elif cmd == "close":
+            close_lid()
+    
+    # Water pump control
     if "pump" in payload:
-        if payload["pump"].lower() == "on":
-            AUTO_MODE = False
+        cmd = payload["pump"].lower()
+        if cmd == "on":
             pump_on()
-        elif payload["pump"].lower() == "off":
-            AUTO_MODE = False
+        elif cmd == "off":
             pump_off()
-        elif payload["pump"].lower() == "auto":
-            AUTO_MODE = True
+    
+    # Direct servo angle control
     if "servo" in payload:
         try:
             angle = int(payload["servo"])
-            set_servo(angle)
-            publish_actuator({"servo": angle, "ts": ts_now_str()})
+            set_both_servos(angle)
+            publish_actuator({"servo_left": angle, "servo_right": angle, "ts": ts_now_str()})
         except:
-            pass
+            print("Invalid servo angle")
+    
+    # Auto mode toggle
     if "auto" in payload:
         if payload["auto"] in [True, False]:
             AUTO_MODE = payload["auto"]
@@ -265,7 +360,8 @@ def read_all_sensors():
     return data
 
 def automation_check_and_act(data):
-    global pump_running_since, last_pump_stop
+    """Check soil moisture and automatically control pump and lift mechanism"""
+    global lift_running_since, last_lift_stop, pump_running_since, last_pump_stop
     if data["soil_moisture"] is None:
         return
     soil = data["soil_moisture"]
@@ -273,18 +369,32 @@ def automation_check_and_act(data):
     is_dry = soil < SOIL_DRY_THRESHOLD       # Lower percentage = drier soil
     is_wet = soil > SOIL_WET_THRESHOLD       # Higher percentage = wetter soil
 
+    # Safety: max runtime for lift
+    if lift_running_since:
+        if now - lift_running_since > LIFT_MAX_RUNTIME_SEC:
+            print("[AUTO] Lift max runtime exceeded — stopping")
+            lift_down()
+            return
+
+    # Safety: max runtime for pump
     if pump_running_since:
         if now - pump_running_since > PUMP_MAX_RUNTIME_SEC:
-            print("Pump max runtime exceeded — stopping pump")
+            print("[AUTO] Pump max runtime exceeded — stopping")
             pump_off()
             return
 
     if AUTO_MODE:
-        if is_dry and (now - last_pump_stop) > PUMP_MIN_OFF_SEC and not pump_running_since:
-            print("Soil dry -> starting pump")
-            pump_on()
+        # Auto-control pump based on soil moisture
+        if is_dry and not pump_running_since:
+            # Soil is dry and pump is off → turn on
+            min_off_time = now - last_pump_stop if last_pump_stop else float('inf')
+            if min_off_time >= PUMP_MIN_OFF_SEC:
+                print("[AUTO] Soil dry ({:.0f}%) — turning pump ON".format(soil))
+                pump_on()
+        
         elif is_wet and pump_running_since:
-            print("Soil wet -> stopping pump")
+            # Soil is wet and pump is on → turn off
+            print("[AUTO] Soil wet ({:.0f}%) — turning pump OFF".format(soil))
             pump_off()
 
 def main_loop():

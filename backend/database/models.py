@@ -26,3 +26,4 @@ class Measurement(Base):
 
     def as_dict(self):
         return {'id': self.id, 'sensor_id': self.sensor_id, 'value': self.value, 'unit': self.unit, 'timestamp': self.timestamp.isoformat()}
+

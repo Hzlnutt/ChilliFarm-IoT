@@ -24,6 +24,17 @@ def on_mqtt_message(topic, data):
     session = get_session()
     try:
         if isinstance(data, dict):
+            # Handle relay/actuator status messages - store in app config
+            if 'pump' in data:
+                relay_state = data['pump']
+                relay_pin = data.get('relay_pin', 26)
+                print(f"[RELAY-STATUS] Pump relay (GPIO {relay_pin}): {relay_state}")
+                
+                # Store in Flask app config for GET /actuator/status endpoint
+                from flask import current_app
+                current_app.config['PUMP_STATE'] = relay_state
+                current_app.config['RELAY_PIN'] = relay_pin
+            
             # Temperature
             if 'temperature_c' in data and data['temperature_c'] is not None:
                 sensor = get_or_create_sensor(session, 'DHT22_TEMP', 'Chili Plant')

@@ -6,6 +6,7 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'change-me')
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///' + os.path.join(basedir, 'data.db'))
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    GEMINI_API_KEY = "AIzaSyAeefoAQX3A6RdjHfj9rYTwvCWdB5UryPA"
 
     # MQTT settings - use local IP (hotspot)
     MQTT_BROKER = os.environ.get('MQTT_BROKER', '192.168.137.1')
